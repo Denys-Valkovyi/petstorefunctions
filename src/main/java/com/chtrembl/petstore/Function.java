@@ -1,5 +1,10 @@
 package com.chtrembl.petstore;
 
+import com.azure.core.util.BinaryData;
+import com.azure.storage.blob.BlobClient;
+import com.azure.storage.blob.BlobContainerClient;
+import com.azure.storage.blob.BlobServiceClient;
+import com.azure.storage.blob.BlobServiceClientBuilder;
 import com.microsoft.azure.functions.ExecutionContext;
 import com.microsoft.azure.functions.HttpMethod;
 import com.microsoft.azure.functions.HttpRequestMessage;
@@ -15,29 +20,30 @@ import java.util.Optional;
  * Azure Functions with HTTP Trigger.
  */
 public class Function {
-    /**
-     * This function listens at endpoint "/api/HttpExample". Two ways to invoke it using "curl" command in bash:
-     * 1. curl -d "HTTP Body" {your host}/api/HttpExample
-     * 2. curl "{your host}/api/HttpExample?name=HTTP%20Query"
-     */
-    @FunctionName("HttpExample")
+    @FunctionName("reserveorder")
     public HttpResponseMessage run(
             @HttpTrigger(
                 name = "req",
-                methods = {HttpMethod.GET, HttpMethod.POST},
+                methods = {HttpMethod.POST},
                 authLevel = AuthorizationLevel.ANONYMOUS)
                 HttpRequestMessage<Optional<String>> request,
             final ExecutionContext context) {
         context.getLogger().info("Java HTTP trigger processed a request.");
 
-        // Parse query parameter
-        final String query = request.getQueryParameters().get("name");
-        final String name = request.getBody().orElse(query);
+        final String bodyJson = request.getBody().orElse("Empty");
+        context.getLogger().info("Body: " + request.getBody());
+        
+        String connectionString = System.getenv("AZURE_STORAGE_CONNECTION_STRING");
 
-        if (name == null) {
-            return request.createResponseBuilder(HttpStatus.BAD_REQUEST).body("Please pass a name on the query string or in the request body").build();
+        BlobServiceClient blobServiceClient = new BlobServiceClientBuilder().connectionString(connectionString).buildClient();
+        BlobContainerClient blobContainerClient = blobServiceClient.getBlobContainerClient("reservationcontainer");
+        BlobClient blobClient = blobContainerClient.getBlobClient("reservation.json");
+        blobClient.upload(BinaryData.fromString(bodyJson), true);
+
+        if (bodyJson.equals("Empty")) {
+            return request.createResponseBuilder(HttpStatus.BAD_REQUEST).body("Please pass data in the request body").build();
         } else {
-            return request.createResponseBuilder(HttpStatus.OK).body("Hello, " + name).build();
+            return request.createResponseBuilder(HttpStatus.OK).body("Success").build();
         }
     }
 }
