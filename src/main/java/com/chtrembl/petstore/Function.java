@@ -20,7 +20,7 @@ public class Function {
                     name = "orders",
                     topicName = "orders",
                     subscriptionName = "functionapp",
-                    connection = "PETSTOREORDERSERVICE_EMAIL_TOPIC_CONNECTION_STRING"
+                    connection = "SERVICE_BUS_ORDERS_TOPIC_CONNECTION_STRING"
             ) String message,
             final ExecutionContext context) {
         context.getLogger().info("Java Service Bus trigger processed a message.");
