@@ -103,6 +103,9 @@ public class Function {
                 context.getLogger().log(Level.SEVERE, "Extended details: " + e.getServiceMessage());
             }
             return false;
+        } catch (Exception e) {
+            context.getLogger().log(Level.SEVERE, "The issue happened during uploading to blob: " + e.getMessage());
+            return false;
         }
     }
 
