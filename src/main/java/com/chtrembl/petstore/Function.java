@@ -49,10 +49,7 @@ public class Function {
 
         boolean uploaded = false;
         for (int i = 0; i < RETRY_COUNT; i++) {
-            context.getLogger().info("Before uploading to BLOB, count: " + i);
             uploaded = tryUploadToBlob(message, context, orderId);
-            context.getLogger().info("After uploading to BLOB, count: " + i);
-            context.getLogger().info("Uploaded to BLOB: " + uploaded);
             if (uploaded) {
                 break;
             }
@@ -85,14 +82,11 @@ public class Function {
 
     private static boolean tryUploadToBlob(String message, ExecutionContext context, String orderId) {
         String connectionString = System.getenv("AZURE_STORAGE_CONNECTION_STRING");
-        context.getLogger().info("Connection String to BLOB: " + connectionString);
         try {
             BlobServiceClient blobServiceClient = new BlobServiceClientBuilder().connectionString(connectionString).buildClient();
-            context.getLogger().info("Got service client to Blob");
             BlobContainerClient blobContainerClient = blobServiceClient.getBlobContainerClient("reservationcontainer");
             BlobClient blobClient = blobContainerClient.getBlobClient(orderId + ".json");
             blobClient.upload(BinaryData.fromString(message), true);
-            context.getLogger().info("Finished execution to Blob");
             return true;
         } catch (BlobStorageException e) {
             HttpResponse response = e.getResponse();
