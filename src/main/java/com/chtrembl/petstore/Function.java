@@ -14,13 +14,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.microsoft.azure.functions.ExecutionContext;
 import com.microsoft.azure.functions.annotation.FunctionName;
 import com.microsoft.azure.functions.annotation.ServiceBusTopicTrigger;
-import org.springframework.http.HttpStatusCode;
-import org.springframework.http.MediaType;
-import org.springframework.web.reactive.function.BodyInserters;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
 
-import java.util.Optional;
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
 import java.util.logging.Level;
 
 /**
@@ -51,8 +49,8 @@ public class Function {
             }
         }
         if (!uploaded) {
-            HttpStatusCode statusCode = uploadToLogicApps(message);
-            if (statusCode.is2xxSuccessful()) {
+            int statusCode = uploadToLogicApps(message, context);
+            if (statusCode >= 200 && statusCode < 300) {
                 context.getLogger().info("Successfully triggered fallback scenario. Sending order details to email.");
             } else {
                 context.getLogger().log(Level.SEVERE, "Fallback scenario fails: " + statusCode);
@@ -60,15 +58,22 @@ public class Function {
         }
     }
 
-    private HttpStatusCode uploadToLogicApps(String body) {
+    private int uploadToLogicApps(String body, ExecutionContext context) {
         String logicAppUrl = System.getenv("LOGIC_APP_URL");
-        WebClient.ResponseSpec response = WebClient.builder().build().post().uri(logicAppUrl)
-                .body(BodyInserters.fromPublisher(Mono.just(body), String.class))
-                .accept(MediaType.APPLICATION_JSON)
-                .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
-                .header("Cache-Control", "no-cache")
-                .retrieve();
-        return Optional.of(response.toBodilessEntity().block().getStatusCode()).get();
+        HttpClient client = HttpClient.newHttpClient();
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(logicAppUrl))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+        java.net.http.HttpResponse response = null;
+        try {
+            response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            context.getLogger().log(Level.SEVERE, "Failed to send the request to Logic App");
+            throw new RuntimeException(e);
+        }
+        return response.statusCode();
     }
 
     private static boolean tryUploadToBlob(String message, ExecutionContext context, String orderId) {
