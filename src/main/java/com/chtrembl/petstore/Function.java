@@ -14,6 +14,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.microsoft.azure.functions.ExecutionContext;
 import com.microsoft.azure.functions.annotation.FunctionName;
 import com.microsoft.azure.functions.annotation.ServiceBusTopicTrigger;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 
 import java.io.IOException;
 import java.net.URI;
@@ -26,7 +31,8 @@ import java.util.logging.Level;
  */
 public class Function {
 
-    public static final int RETRY_COUNT = 3;
+    private static final int RETRY_COUNT = 3;
+    private static final MediaType JSON = MediaType.get("application/json");
 
     @FunctionName("reserveorder")
     public void run(
@@ -49,31 +55,29 @@ public class Function {
             }
         }
         if (!uploaded) {
-            int statusCode = uploadToLogicApps(message, context);
-            if (statusCode >= 200 && statusCode < 300) {
+            boolean isSuccessfulStatusCode = uploadToLogicApps(message, context);
+            if (isSuccessfulStatusCode) {
                 context.getLogger().info("Successfully triggered fallback scenario. Sending order details to email.");
             } else {
-                context.getLogger().log(Level.SEVERE, "Fallback scenario fails: " + statusCode);
+                context.getLogger().log(Level.SEVERE, "Fallback scenario fails");
             }
         }
     }
 
-    private int uploadToLogicApps(String body, ExecutionContext context) {
+    private boolean uploadToLogicApps(String jsonBody, ExecutionContext context) {
         String logicAppUrl = System.getenv("LOGIC_APP_URL");
-        HttpClient client = HttpClient.newHttpClient();
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(logicAppUrl))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(body))
+        OkHttpClient client = new OkHttpClient();
+        RequestBody body = RequestBody.create(jsonBody, JSON);
+        Request request = new Request.Builder()
+                .url(logicAppUrl)
+                .post(body)
                 .build();
-        java.net.http.HttpResponse response = null;
-        try {
-            response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
-        } catch (IOException | InterruptedException e) {
-            context.getLogger().log(Level.SEVERE, "Failed to send the request to Logic App");
+        try (Response response = client.newCall(request).execute()) {
+            return response.isSuccessful();
+        } catch (IOException e) {
+            context.getLogger().log(Level.SEVERE, "Logic App request fails: " + e.getMessage());
             throw new RuntimeException(e);
         }
-        return response.statusCode();
     }
 
     private static boolean tryUploadToBlob(String message, ExecutionContext context, String orderId) {
