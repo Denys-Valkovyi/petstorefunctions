@@ -46,48 +46,16 @@ public class Function {
         context.getLogger().info("Java Service Bus trigger processed a message: " + message);
 
         String orderId = getOrderIdFromMessage(message, context);
-
-        boolean uploaded = false;
-        for (int i = 0; i < RETRY_COUNT; i++) {
-            uploaded = tryUploadToBlob(message, context, orderId);
-            if (uploaded) {
-                break;
-            }
-        }
-        if (!uploaded) {
-            boolean isSuccessfulStatusCode = uploadToLogicApps(message, context);
-            if (isSuccessfulStatusCode) {
-                context.getLogger().info("Successfully triggered fallback scenario. Sending order details to email.");
-            } else {
-                context.getLogger().log(Level.SEVERE, "Fallback scenario fails");
-            }
-        }
+        tryUploadToBlob(message, context, orderId);
     }
 
-    private boolean uploadToLogicApps(String jsonBody, ExecutionContext context) {
-        String logicAppUrl = System.getenv("LOGIC_APP_URL");
-        OkHttpClient client = new OkHttpClient();
-        RequestBody body = RequestBody.create(jsonBody, JSON);
-        Request request = new Request.Builder()
-                .url(logicAppUrl)
-                .post(body)
-                .build();
-        try (Response response = client.newCall(request).execute()) {
-            return response.isSuccessful();
-        } catch (IOException e) {
-            context.getLogger().log(Level.SEVERE, "Logic App request fails: " + e.getMessage());
-            throw new RuntimeException(e);
-        }
-    }
-
-    private static boolean tryUploadToBlob(String message, ExecutionContext context, String orderId) {
+    private static void tryUploadToBlob(String message, ExecutionContext context, String orderId) {
         String connectionString = System.getenv("AZURE_STORAGE_CONNECTION_STRING");
         try {
             BlobServiceClient blobServiceClient = new BlobServiceClientBuilder().connectionString(connectionString).buildClient();
             BlobContainerClient blobContainerClient = blobServiceClient.getBlobContainerClient("reservationcontainer");
             BlobClient blobClient = blobContainerClient.getBlobClient(orderId + ".json");
             blobClient.upload(BinaryData.fromString(message), true);
-            return true;
         } catch (BlobStorageException e) {
             HttpResponse response = e.getResponse();
             context.getLogger().log(Level.SEVERE, "Uploading failed with Http status code: " + response.getStatusCode());
@@ -96,10 +64,10 @@ public class Function {
             } else if (e.getErrorCode() == BlobErrorCode.CONTAINER_BEING_DELETED) {
                 context.getLogger().log(Level.SEVERE, "Extended details: " + e.getServiceMessage());
             }
-            return false;
+            throw new RuntimeException(e);
         } catch (Exception e) {
             context.getLogger().log(Level.SEVERE, "The issue happened during uploading to blob: " + e.getMessage());
-            return false;
+            throw new RuntimeException(e);
         }
     }
 
