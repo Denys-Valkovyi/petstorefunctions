@@ -14,16 +14,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.microsoft.azure.functions.ExecutionContext;
 import com.microsoft.azure.functions.annotation.FunctionName;
 import com.microsoft.azure.functions.annotation.ServiceBusTopicTrigger;
-import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.util.logging.Level;
 
 /**
@@ -31,8 +22,6 @@ import java.util.logging.Level;
  */
 public class Function {
 
-    private static final int RETRY_COUNT = 3;
-    private static final MediaType JSON = MediaType.get("application/json");
 
     @FunctionName("reserveorder")
     public void run(
@@ -72,7 +61,7 @@ public class Function {
     }
 
     private static String getOrderIdFromMessage(String message, ExecutionContext context) {
-        JsonNode jsonNode = null;
+        JsonNode jsonNode;
         try {
             jsonNode = new ObjectMapper().readTree(message);
         } catch (JsonProcessingException e) {
